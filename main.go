@@ -1,20 +1,34 @@
 package main
 
 import (
+	"database/sql"
+	"flag"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
-var myProcess *os.Process
+const (
+	assetDirName = "assets"
+	templDirName = "templates"
+	assetPrefix = "/" + assetDirName + "/"
+)
 
-func jsHandler (w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	io.WriteString(w, "// here shall be a script\n")
+var (
+	myProcess *os.Process
+	db *sql.DB
 
-}
+	driver   string
+	dsn      string
+	listen   string
+
+	dataDir  string
+	assetDir string
+	templDir string
+)
 
 func stopHandler (w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -30,11 +44,41 @@ func main() {
 	if myProcess, err = os.FindProcess(pid); err != nil {
 		log.Fatal(err)
 	}
-	http.HandleFunc("/script.js", jsHandler)
+	parseFlags()
+	prepare()
+	start()
+}
+
+func prepare() {
+	var err error
+	if db, err = sql.Open(driver, dsn); err != nil {
+		log.Fatal(err)
+	}
+	prepareDB()
+	assetDir = filepath.Join(dataDir, assetDirName)
+	templDir = filepath.Join(dataDir, templDirName)
+	http.Handle(assetPrefix, http.StripPrefix(assetPrefix,
+		http.FileServer(http.Dir(assetDir))))
 	http.HandleFunc("/stop", stopHandler)
-	if err := http.ListenAndServe("localhost:3003", nil); err != nil {
+}
+
+func start() {
+	if err := http.ListenAndServe(listen, nil); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// vim: syntax=go
+func parseFlags() {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	flag.StringVar(&driver, "db", "mysql", "Database driver");
+	flag.StringVar(&dsn, "dsn", "warehz:warehz@localhost/warehz",
+		"Data source name");
+	flag.StringVar(&listen, "listen", "localhost:3003",
+		"Address and port to listen");
+	flag.StringVar(&dataDir, "data", wd,
+		"The directory containing data files");
+	flag.Parse();
+}
