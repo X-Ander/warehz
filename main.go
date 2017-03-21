@@ -1,14 +1,16 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"gopkg.in/mgo.v2"
 )
 
 const (
@@ -19,15 +21,16 @@ const (
 
 var (
 	myProcess *os.Process
-	db *sql.DB
+	dbSes *mgo.Session
 
-	driver   string
-	dsn      string
+	dbURL    string
 	listen   string
 
 	dataDir  string
 	assetDir string
 	templDir string
+
+	templates *template.Template
 )
 
 func stopHandler (w http.ResponseWriter, r *http.Request) {
@@ -38,6 +41,17 @@ func stopHandler (w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func giveUp (w http.ResponseWriter, _ *http.Request, err error) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusInternalServerError)
+	io.WriteString(w, err.Error())
+}
+
+func personsHandler (w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.ExecuteTemplate(w, "persons", nil)
+}
+
 func main() {
 	pid := os.Getpid()
 	var err error
@@ -46,12 +60,13 @@ func main() {
 	}
 	parseFlags()
 	prepare()
+	defer dbSes.Close()
 	start()
 }
 
 func prepare() {
 	var err error
-	if db, err = sql.Open(driver, dsn); err != nil {
+	if dbSes, err = mgo.Dial(dbURL); err != nil {
 		log.Fatal(err)
 	}
 	prepareDB()
@@ -60,6 +75,17 @@ func prepare() {
 	http.Handle(assetPrefix, http.StripPrefix(assetPrefix,
 		http.FileServer(http.Dir(assetDir))))
 	http.HandleFunc("/stop", stopHandler)
+	http.HandleFunc("/persons", personsHandler)
+
+	templates = template.New(templDirName)
+	templates.Delims("{{%", "%}}")
+	_, err = templates.ParseFiles(
+		filepath.Join(templDir, "header.html"),
+		filepath.Join(templDir, "footer.html"),
+		filepath.Join(templDir, "persons.html"))
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func start() {
@@ -73,9 +99,7 @@ func parseFlags() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	flag.StringVar(&driver, "db", "mysql", "Database driver");
-	flag.StringVar(&dsn, "dsn", "warehz:warehz@localhost/warehz",
-		"Data source name");
+	flag.StringVar(&dbURL, "db", "localhost", "MongoDB database URL");
 	flag.StringVar(&listen, "listen", "localhost:3003",
 		"Address and port to listen");
 	flag.StringVar(&dataDir, "data", wd,

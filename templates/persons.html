@@ -1,0 +1,122 @@
+{{% define "persons" %}}
+{{% template "header" %}}
+<div ng-app="whApp" ng-controller="whCtrl" class="w3-container">
+	<p>
+		Name of this name type:<br>
+		<input type="text" required ng-model="newNameType.name"><br>
+		Number of name parts:<br>
+		<input type="number" min="1" max="26" required
+			ng-model="newNameTypePartCnt">
+	</p>
+	<div ng-repeat="part in newNameType.parts track by $index">
+		<p>
+			{{ numToLtr($index) }}:
+			<input type="text" required ng-model="newNameType.parts[$index]">
+		</p>
+	</div>
+	<p>
+		Full canonical name pattern:<br>
+		<input type="text" required ng-model="newNameType.fcnPat"><br>
+		Short canonical name pattern:<br>
+		<input type="text" required ng-model="newNameType.scnPat"><br>
+		Full formal name pattern:<br>
+		<input type="text" required ng-model="newNameType.ffnPat"><br>
+		Short formal name pattern:<br>
+		<input type="text" required ng-model="newNameType.sfnPat"><br>
+		Dictionary name pattern:<br>
+		<input type="text" required ng-model="newNameType.dnPat">
+	</p>
+	<p>
+		<button ng-click="newNameTypeAdd()">Add</button>
+	</p>
+	<table class="w3-table w3-striped w3-border">
+		<tr>
+			<th>Name</th><th>Parts</th>
+			<th>FCN</th><th>SCN</th><th>FFN</th><th>SFN</th><th>DN</th>
+			<th>State</th>
+		</tr>
+		<tr ng-repeat="nt in nameTypes">
+			<td>{{ nt.name }}</td>
+			<td>
+				<span ng-repeat="p in nt.parts track by $index">
+					<span ng-if="$index != 0"><br></span>
+					{{ numToLtr($index) }}: {{ p }}
+				</span>
+			</td>
+			<td>{{nt.fcnPat}}</td>
+			<td>{{nt.scnPat}}</td>
+			<td>{{nt.ffnPat}}</td>
+			<td>{{nt.sfnPat}}</td>
+			<td>{{nt.dnPat}}</td>
+			<td>{{nt._state}}</td>
+		</tr>
+	</table>
+	</div>
+</div>
+
+<script>
+var app = angular.module("whApp", []);
+app.controller("whCtrl", ["$scope", "db", function($scope, db) {
+	$scope.nameTypes = [];
+	$scope.newNameType = {
+		name: "",
+		parts: [ "" ],
+		fcnPat: "",
+		scnPat: "",
+		ffnPat: "",
+		sfnPat: "",
+		dnPat: ""
+	};
+	var aCode = "a".charCodeAt(0);
+	var zCode = "z".charCodeAt(0);
+	var ACode = "A".charCodeAt(0);
+	var ZCode = "Z".charCodeAt(0);
+	$scope.ltrToNum = function(ltr) {
+		var code = ltr.charCodeAt(0);
+		if (aCode <= code && code <= zCode) { return code - aCode; }
+		if (ACode <= code && code <= ZCode) { return code - ACode; }
+		return -1;
+	};
+	$scope.numToLtr = function(num, upper) {
+		if (num < 0 || num > 25) { return ""; }
+		if (upper) { num += ACode; } else { num += aCode; }
+		return String.fromCharCode(num);
+	};
+	$scope.newNameTypePartCnt = 1;
+	$scope.$watch("newNameTypePartCnt", function(cnt) {
+		var parts = $scope.newNameType.parts;
+		if (cnt < parts.length) {
+			parts.length = cnt;
+		} else while (cnt > parts.length) {
+			parts.push("");
+		}
+	});
+	$scope.newNameTypeAdd = function() {
+		var nt = $scope.newNameType;
+		if (nt.name == "") {
+			return;
+		}
+		nt = angular.copy(nt);
+		$scope.nameTypes.push(nt);
+		db.create("NameType", nt);
+	};
+}]);
+
+app.factory("db", ["$timeout", function($timeout) {
+	var idCnt = 1;
+	return {
+		create: function(objType, obj, func) {
+			obj._state = "creating";
+			$timeout(function(){
+				obj._id = idCnt;
+				idCnt++;
+				obj._state = "ready";
+				if (func) { func(objType, obj); }
+			}, 1000);
+		}
+	};
+}])
+
+</script>
+{{% template "footer" %}}
+{{% end %}}
