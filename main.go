@@ -9,8 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-
-	"gopkg.in/mgo.v2"
+	"time"
 )
 
 const (
@@ -21,9 +20,8 @@ const (
 
 var (
 	myProcess *os.Process
-	dbSes *mgo.Session
 
-	dbURL    string
+	dsn      string
 	listen   string
 
 	dataDir  string
@@ -33,12 +31,17 @@ var (
 	templates *template.Template
 )
 
-func stopHandler (w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	io.WriteString(w, "stop\n")
+func stop() {
+	time.Sleep(10 * time.Second)
 	if err := myProcess.Signal(syscall.SIGTERM); err != nil {
 		log.Print(err)
 	}
+}
+
+func stopHandler (w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	io.WriteString(w, "stop\n")
+	go stop()
 }
 
 func giveUp (w http.ResponseWriter, _ *http.Request, err error) {
@@ -52,26 +55,19 @@ func personsHandler (w http.ResponseWriter, r *http.Request) {
 	templates.ExecuteTemplate(w, "persons", nil)
 }
 
-func main() {
-	pid := os.Getpid()
+func start() {
 	var err error
+
+	pid := os.Getpid()
 	if myProcess, err = os.FindProcess(pid); err != nil {
 		log.Fatal(err)
 	}
-	parseFlags()
-	prepare()
-	defer dbSes.Close()
-	start()
-}
 
-func prepare() {
-	var err error
-	if dbSes, err = mgo.Dial(dbURL); err != nil {
-		log.Fatal(err)
-	}
 	prepareDB()
+	
 	assetDir = filepath.Join(dataDir, assetDirName)
 	templDir = filepath.Join(dataDir, templDirName)
+
 	http.Handle(assetPrefix, http.StripPrefix(assetPrefix,
 		http.FileServer(http.Dir(assetDir))))
 	http.HandleFunc("/stop", stopHandler)
@@ -86,10 +82,8 @@ func prepare() {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
 
-func start() {
-	if err := http.ListenAndServe(listen, nil); err != nil {
+	if err = http.ListenAndServe(listen, nil); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -99,10 +93,17 @@ func parseFlags() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	flag.StringVar(&dbURL, "db", "localhost", "MongoDB database URL");
+	flag.StringVar(&dsn, "dsn",
+		"warehz@unix(/var/run/mysqld/mysqld.sock)/warehz",
+		"Data source name");
 	flag.StringVar(&listen, "listen", "localhost:3003",
 		"Address and port to listen");
 	flag.StringVar(&dataDir, "data", wd,
 		"The directory containing data files");
 	flag.Parse();
+}
+
+func main() {
+	parseFlags()
+	start()
 }

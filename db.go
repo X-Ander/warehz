@@ -1,43 +1,19 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 
-	"gopkg.in/mgo.v2"
+	_ "github.com/go-sql-driver/mysql"
 )
-
-const (
-	dbVersion = "0.1"
-)
-
-type MetaData struct {
-	Version string
-}
 
 var (
-	db *mgo.Database
-	oc *mgo.Collection  // Object collection
-	mc *mgo.Collection  // Metadata collection
-	meta MetaData
+	db *sql.DB
 )
 
 func prepareDB() {
-	db = dbSes.DB("")
-	oc = db.C("objects")
-	mc = db.C("meta")
-	checkMeta()
-}
-
-func checkMeta() {
-	err := mc.Find(nil).One(&meta)
-	if err == mgo.ErrNotFound {
-		meta.Version = dbVersion
-		err = mc.Insert(&meta)
-	}
-	if err != nil {
+	var err error
+	if db, err = sql.Open("mysql", dsn); err != nil {
 		log.Fatal(err)
-	}
-	if meta.Version != dbVersion {
-		log.Fatalf("Database version (%s) is not supported\n", meta.Version)
 	}
 }
