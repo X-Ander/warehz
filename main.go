@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"syscall"
-	"time"
+
+	"github.com/fvbock/endless"
 )
 
 const (
@@ -31,17 +31,9 @@ var (
 	templates *template.Template
 )
 
-func stop() {
-	time.Sleep(10 * time.Second)
-	if err := myProcess.Signal(syscall.SIGTERM); err != nil {
-		log.Print(err)
-	}
-}
-
-func stopHandler (w http.ResponseWriter, r *http.Request) {
+func pingHandler (w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	io.WriteString(w, "stop\n")
-	go stop()
+	io.WriteString(w, "pong\n")
 }
 
 func giveUp (w http.ResponseWriter, _ *http.Request, err error) {
@@ -70,7 +62,7 @@ func start() {
 
 	http.Handle(assetPrefix, http.StripPrefix(assetPrefix,
 		http.FileServer(http.Dir(assetDir))))
-	http.HandleFunc("/stop", stopHandler)
+	http.HandleFunc("/ping", pingHandler)
 	http.HandleFunc("/persons", personsHandler)
 
 	templates = template.New(templDirName)
@@ -83,7 +75,7 @@ func start() {
 		log.Fatal(err)
 	}
 
-	if err = http.ListenAndServe(listen, nil); err != nil {
+	if err = endless.ListenAndServe(listen, nil); err != nil {
 		log.Fatal(err)
 	}
 }
